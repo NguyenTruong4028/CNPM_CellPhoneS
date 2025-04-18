@@ -87,6 +87,41 @@ $result = $conn->query($sql);
       cursor: pointer;
       text-decoration: none;
     }
+
+    filter-date {
+    display: flex;
+    gap: 10px;
+  }
+  .filter-date input[type="date"] {
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: #fff;
+    font-size: 14px;
+  }
+  .filter-date button {
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: none;
+    background-color: var(--primary-color);
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  .filter-date button:hover {
+    background-color: var(--primary-color-hover);
+  }
+  .filter-date button[type="submit"] {
+    margin-left: 10px;
+  }
+  .filter-date label {
+    font-size: 14px;
+    margin-right: 10px;
+  }
+  .filter-date input[type="date"] {
+    width: 150px;
+  }
   </style>
 </head>
 
