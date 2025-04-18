@@ -7,7 +7,7 @@ $sql = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.SoHieu, tb.HinhAnh,
         FROM ThietBi AS tb
         LEFT JOIN LoaiThietBi AS ltb ON tb.MaLoai = ltb.MaLoai
         LEFT JOIN ThuongHieu AS th ON tb.MaTH = th.MaTH
-        ORDER BY tb.MaHH";      
+        ORDER BY tb.MaHH";
 
 $result = $conn->query($sql);
 
@@ -27,8 +27,8 @@ $action = isset($_GET['action']) ? $_GET['action'] : '';
 $ngayNhap = isset($_GET['ngay_nhap']) ? $_GET['ngay_nhap'] : '';
 
 if ($action == 'filter' && !empty($ngayNhap)) {
-    // Nếu nhấn nút "Tìm"
-    $sql = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.SoHieu, tb.HinhAnh,
+  // Nếu nhấn nút "Tìm"
+  $sql = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.SoHieu, tb.HinhAnh,
                    ltb.TenLoai, th.TenTH
             FROM ThietBi AS tb
             LEFT JOIN LoaiThietBi AS ltb ON tb.MaLoai = ltb.MaLoai
@@ -36,8 +36,8 @@ if ($action == 'filter' && !empty($ngayNhap)) {
             WHERE DATE(tb.NgayNhap) = '$ngayNhap'
             ORDER BY tb.MaHH";
 } else {
-    // Mặc định hoặc khi nhấn nút "Xóa lọc"
-    $sql = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.SoHieu, tb.HinhAnh,
+  // Mặc định hoặc khi nhấn nút "Xóa lọc"
+  $sql = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.SoHieu, tb.HinhAnh,
                    ltb.TenLoai, th.TenTH
             FROM ThietBi AS tb
             LEFT JOIN LoaiThietBi AS ltb ON tb.MaLoai = ltb.MaLoai
@@ -57,39 +57,37 @@ $result = $conn->query($sql);
   <!-- Các cột dữ liệu của bảng sản phẩm -->
 </tr>
 
-<!-- Thêm style CSS để làm nổi bật sản phẩm mới -->
-<style>
-  .highlight-new {
-    background-color: #fffde7;
-    animation: fadeBackground 3s ease-in-out;
-  }
-
-  @keyframes fadeBackground {
-    from {
-      background-color: #fff9c4;
-    }
-
-    to {
-      background-color: #fffde7;
-    }
-  }
-  
-  /* Thêm style cho nút xem chi tiết */
-  .detail-btn {
-    margin-right: 5px;
-    color:rgb(0, 0, 0);
-    cursor: pointer;
-    text-decoration: none;
-  }
-</style>
-
 <!DOCTYPE html>
 <html lang="vi">
 
 <head>
   <meta charset="UTF-8" />
   <title>Quản Lý Hàng Hóa - CellphoneS</title>
-  <link rel="stylesheet" href="index.css" />
+  <link rel="stylesheet" href="./index.css" />
+  <style>
+    .highlight-new {
+      background-color: #fffde7;
+      animation: fadeBackground 3s ease-in-out;
+    }
+
+    @keyframes fadeBackground {
+      from {
+        background-color: #fff9c4;
+      }
+
+      to {
+        background-color: #fffde7;
+      }
+    }
+
+    /* Thêm style cho nút xem chi tiết */
+    .detail-btn {
+      margin-right: 5px;
+      color: rgb(0, 0, 0);
+      cursor: pointer;
+      text-decoration: none;
+    }
+  </style>
 </head>
 
 <body>
@@ -168,7 +166,7 @@ $result = $conn->query($sql);
         </select>
 
         <form method="GET" action="">
-          <div>
+          <div class="filter-date">
             <label for="ngay_nhap">Ngày nhập</label>
             <input type="date" name="ngay_nhap" id="ngay_nhap" value="<?php echo isset($_GET['ngay_nhap']) ? $_GET['ngay_nhap'] : ''; ?>">
             <button type="submit" name="action" value="filter">Tìm</button>

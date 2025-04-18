@@ -1,120 +1,117 @@
 <?php
-include '../db.php'; // Kết nối đến cơ sở dữ liệu
+include '../db.php';
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// Khởi tạo biến thông báo
+// Biến thông báo
 $notification = '';
 
-// Xử lý khi form được submit
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['create_order'])) {
-    // Lấy thông tin từ form
-    $maKH = $_POST['maKH'];
-    $ngayLap = date('Y-m-d');
-    $products = isset($_POST['products']) ? $_POST['products'] : [];
-    $quantities = isset($_POST['quantities']) ? $_POST['quantities'] : [];
-    
-    if (count($products) > 0) {
-        // Bắt đầu transaction
+// Xử lý khi submit tạo đơn hàng
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_order'])) {
+    $maKH = $_POST['maKH'] ?? '';
+    $products = $_POST['products'] ?? [];
+    $quantities = $_POST['quantities'] ?? [];
+
+    if (empty($maKH)) {
+        $notification = '<div class="alert alert-warning">Vui lòng chọn khách hàng.</div>';
+    } elseif (count($products) === 0) {
+        $notification = '<div class="alert alert-warning">Vui lòng thêm sản phẩm vào giỏ hàng.</div>';
+    } else {
         $conn->begin_transaction();
-        
         try {
-            // Tạo hóa đơn mới
-            $sqlHoaDon = "INSERT INTO HoaDon (MaKH, NgayLap, TongTien) VALUES (?, ?, 0)";
-            $stmtHoaDon = $conn->prepare($sqlHoaDon);
-            $stmtHoaDon->bind_param("is", $maKH, $ngayLap);
-            $stmtHoaDon->execute();
-            
-            // Lấy ID hóa đơn vừa tạo
-            $maHD = $conn->insert_id;
+            // Sinh mã hóa đơn tự động (HD001, HD002,...)
+            $res = $conn->query("SELECT MAX(MaHD) AS maxID FROM hoadon");
+            $row = $res->fetch_assoc();
+            $last = $row['maxID'] ? (int)substr($row['maxID'], 2) : 0;
+            $newMaHD = 'HD' . str_pad($last + 1, 3, '0', STR_PAD_LEFT);
+
+            // Tạo hóa đơn với TongTien = 0 tạm thời
+            $stmtHD = $conn->prepare(
+                "INSERT INTO hoadon (MaHD, MaKH, NgayLap, TongTien) VALUES (?, ?, NOW(), 0)"
+            );
+            $stmtHD->bind_param('ss', $newMaHD, $maKH);
+            $stmtHD->execute();
+
+            // Chuẩn bị statement thêm chi tiết và cập nhật tồn kho
+            $stmtCT = $conn->prepare(
+                "INSERT INTO cthd (MaHD, MaMH, SL, DGMua) VALUES (?, ?, ?, ?)"
+            );
+            $stmtUpd = $conn->prepare(
+                "UPDATE thietbi SET SL = SL - ? WHERE MaHH = ?"
+            );
+
             $tongTien = 0;
-            
-            // Thêm chi tiết hóa đơn
-            $sqlCTHD = "INSERT INTO CTHD (MaHD, MaMH, SL, DGMua) VALUES (?, ?, ?, ?)";
-            $stmtCTHD = $conn->prepare($sqlCTHD);
-            
-            // Cập nhật số lượng sản phẩm
-            $sqlUpdateProduct = "UPDATE ThietBi SET SL = SL - ? WHERE MaHH = ?";
-            $stmtUpdateProduct = $conn->prepare($sqlUpdateProduct);
-            
-            // Thêm từng sản phẩm vào chi tiết hóa đơn
-            for ($i = 0; $i < count($products); $i++) {
-                if ($quantities[$i] > 0) {
-                    $productId = $products[$i];
-                    $quantity = $quantities[$i];
-                    
-                    // Lấy thông tin sản phẩm
-                    $sqlProduct = "SELECT DGBan, SL FROM ThietBi WHERE MaHH = ?";
-                    $stmtProduct = $conn->prepare($sqlProduct);
-                    $stmtProduct->bind_param("i", $productId);
-                    $stmtProduct->execute();
-                    $resultProduct = $stmtProduct->get_result();
-                    $rowProduct = $resultProduct->fetch_assoc();
-                    
-                    // Kiểm tra số lượng tồn
-                    if ($rowProduct['SL'] < $quantity) {
-                        throw new Exception("Sản phẩm không đủ số lượng tồn kho!");
-                    }
-                    
-                    $donGia = $rowProduct['DGBan'];
-                    $thanhTien = $donGia * $quantity;
-                    $tongTien += $thanhTien;
-                    
-                    // Thêm chi tiết hóa đơn
-                    $stmtCTHD->bind_param("iiid", $maHD, $productId, $quantity, $donGia);
-                    $stmtCTHD->execute();
-                    
-                    // Cập nhật số lượng tồn kho
-                    $stmtUpdateProduct->bind_param("ii", $quantity, $productId);
-                    $stmtUpdateProduct->execute();
-                }
+            // Thêm từng sản phẩm
+            foreach ($products as $i => $pid) {
+                $qty = (int)$quantities[$i];
+                if ($qty <= 0) continue;
+
+                // Lấy giá và kiểm tra tồn kho
+                $stmtP = $conn->prepare(
+                    "SELECT DGBan, SL FROM thietbi WHERE MaHH = ?"
+                );
+                $stmtP->bind_param('s', $pid);
+                $stmtP->execute();
+                $rP = $stmtP->get_result()->fetch_assoc();
+                if (!$rP) throw new Exception("Sản phẩm $pid không tồn tại.");
+                if ($rP['SL'] < $qty) throw new Exception("Sản phẩm $pid không đủ tồn kho.");
+
+                $donGia = $rP['DGBan'];
+                $thanhTien = $donGia * $qty;
+                $tongTien += $thanhTien;
+
+                // Ghi chi tiết
+                $stmtCT->bind_param('ssis', $newMaHD, $pid, $qty, $donGia);
+                $stmtCT->execute();
+
+                // Cập nhật tồn kho
+                $stmtUpd->bind_param('is', $qty, $pid);
+                $stmtUpd->execute();
             }
-            
+
             // Cập nhật tổng tiền hóa đơn
-            $sqlUpdateTotal = "UPDATE HoaDon SET TongTien = ? WHERE MaHD = ?";
-            $stmtUpdateTotal = $conn->prepare($sqlUpdateTotal);
-            $stmtUpdateTotal->bind_param("di", $tongTien, $maHD);
-            $stmtUpdateTotal->execute();
-            
-            // Commit transaction
+            $stmtUpdTotal = $conn->prepare(
+                "UPDATE hoadon SET TongTien = ? WHERE MaHD = ?"
+            );
+            $stmtUpdTotal->bind_param('ds', $tongTien, $newMaHD);
+            $stmtUpdTotal->execute();
+
             $conn->commit();
-            
-            $notification = '<div class="alert alert-success">Đã tạo đơn hàng thành công!</div>';
+            $notification = '<div class="alert alert-success">Tạo hóa đơn ' . $newMaHD . ' thành công!</div>';
         } catch (Exception $e) {
-            // Rollback nếu có lỗi
             $conn->rollback();
             $notification = '<div class="alert alert-danger">Lỗi: ' . $e->getMessage() . '</div>';
         }
-    } else {
-        $notification = '<div class="alert alert-warning">Chưa chọn sản phẩm nào!</div>';
     }
 }
 
-// Lấy danh sách khách hàng
-$sqlKhachHang = "SELECT * FROM KhachHang ORDER BY TenKH";
-$resultKhachHang = $conn->query($sqlKhachHang);
+// Lấy dữ liệu để hiển thị
+// Danh sách sản phẩm
+$sql = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.HinhAnh,
+           ltb.TenLoai, th.TenTH
+        FROM thietbi tb
+        LEFT JOIN LoaiThietBi ltb ON tb.MaLoai = ltb.MaLoai
+        LEFT JOIN ThuongHieu th ON tb.MaTH = th.MaTH
+        WHERE tb.SL > 0
+        ORDER BY tb.TenHH";
+$resultProducts = $conn->query($sql);
 
-// Lấy danh sách sản phẩm có số lượng > 0
-$sqlProducts = "SELECT tb.MaHH, tb.TenHH, tb.SL, tb.DGBan, tb.HinhAnh, 
-                         ltb.TenLoai, th.TenTH
-                  FROM ThietBi AS tb
-                  LEFT JOIN LoaiThietBi AS ltb ON tb.MaLoai = ltb.MaLoai
-                  LEFT JOIN ThuongHieu AS th ON tb.MaTH = th.MaTH
-                  WHERE tb.SL > 0
-                  ORDER BY tb.TenHH";
-$resultProducts = $conn->query($sqlProducts);
+// Danh sách khách hàng
+$sqlKH = "SELECT MaKH, TenKH, SDT FROM khachhang ORDER BY TenKH";
+$resultKhachHang = $conn->query($sqlKH);
 
-// Lấy danh sách các đơn hàng gần đây
-$sqlRecentOrders = "SELECT hd.MaHD, hd.NgayLap, hd.TongTien, kh.TenKH, 
-                          COUNT(cthd.MaMH) AS SoMatHang,
-                          SUM(cthd.SL) AS TongSoLuong
-                   FROM HoaDon hd
-                   LEFT JOIN KhachHang kh ON hd.MaKH = kh.MaKH
-                   LEFT JOIN CTHD cthd ON hd.MaHD = cthd.MaHD
-                   GROUP BY hd.MaHD
-                   ORDER BY hd.NgayLap DESC
-                   LIMIT 10";
-$resultRecentOrders = $conn->query($sqlRecentOrders);
+// Đơn hàng gần đây
+$sqlRecent = "SELECT hd.MaHD, kh.TenKH, hd.NgayLap,
+                  COUNT(ct.MaMH) AS SoMatHang,
+                  SUM(ct.SL) AS TongSoLuong, hd.TongTien
+               FROM hoadon hd
+               JOIN khachhang kh ON hd.MaKH = kh.MaKH
+               JOIN cthd ct ON hd.MaHD = ct.MaHD
+               GROUP BY hd.MaHD
+               ORDER BY hd.NgayLap DESC
+               LIMIT 10";
+$resultRecentOrders = $conn->query($sqlRecent);
+
 ?>
-
 <!DOCTYPE html>
 <html lang="vi">
 
@@ -280,160 +277,7 @@ $resultRecentOrders = $conn->query($sqlRecentOrders);
     </div>
   </main>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const productGrid = document.getElementById('productGrid');
-      const cartItems = document.getElementById('cartItems');
-      const totalAmount = document.getElementById('totalAmount');
-      const checkoutBtn = document.getElementById('checkoutBtn');
-      const searchInput = document.getElementById('searchProduct');
-      const filterCategory = document.getElementById('filterCategory');
-      const filterBrand = document.getElementById('filterBrand');
-      
-      let cart = [];
-      
-      // Toggle mobile menu
-      document.querySelector(".mobile-menu-toggle").addEventListener("click", function() {
-        document.querySelector(".sidebar").classList.toggle("active");
-      });
-      
-      // Thêm sản phẩm vào giỏ hàng
-      productGrid.addEventListener('click', function(e) {
-        const productCard = e.target.closest('.product-card');
-        if (!productCard) return;
-        
-        const productId = productCard.dataset.id;
-        const productName = productCard.dataset.name;
-        const productPrice = parseFloat(productCard.dataset.price);
-        const productStock = parseInt(productCard.dataset.stock);
-        const productImage = productCard.dataset.image;
-        
-        // Kiểm tra xem sản phẩm đã có trong giỏ hàng chưa
-        const existingItemIndex = cart.findIndex(item => item.id === productId);
-        
-        if (existingItemIndex !== -1) {
-          // Nếu đã có, tăng số lượng nếu còn hàng
-          if (cart[existingItemIndex].quantity < productStock) {
-            cart[existingItemIndex].quantity++;
-          } else {
-            alert('Số lượng sản phẩm đã đạt tối đa!');
-            return;
-          }
-        } else {
-          // Nếu chưa có, thêm vào giỏ hàng
-          cart.push({
-            id: productId,
-            name: productName,
-            price: productPrice,
-            stock: productStock,
-            image: productImage,
-            quantity: 1
-          });
-        }
-        
-        updateCart();
-      });
-      
-      // Cập nhật hiển thị giỏ hàng
-      function updateCart() {
-        if (cart.length === 0) {
-          cartItems.innerHTML = '<div class="cart-empty">Chưa có sản phẩm nào trong giỏ hàng</div>';
-          checkoutBtn.disabled = true;
-        } else {
-          checkoutBtn.disabled = false;
-          
-          let cartHTML = '';
-          let total = 0;
-          
-          cart.forEach((item, index) => {
-            const itemTotal = item.price * item.quantity;
-            total += itemTotal;
-            
-            cartHTML += `
-              <div class="cart-item">
-                <img src="../Them+TraCuu/${item.image}" alt="${item.name}" class="cart-item-image">
-                <div class="cart-item-details">
-                  <div class="cart-item-name">${item.name}</div>
-                  <div class="cart-item-price">${formatCurrency(item.price)}</div>
-                </div>
-                <div class="cart-item-actions">
-                  <div class="quantity-control">
-                    <button type="button" class="quantity-btn" onclick="updateQuantity(${index}, -1)">-</button>
-                    <input type="text" class="quantity-input" value="${item.quantity}" readOnly>
-                    <input type="hidden" name="products[]" value="${item.id}">
-                    <input type="hidden" name="quantities[]" value="${item.quantity}">
-                    <button type="button" class="quantity-btn" onclick="updateQuantity(${index}, 1)">+</button>
-                  </div>
-                  <button type="button" class="remove-btn" onclick="removeItem(${index})">×</button>
-                </div>
-              </div>
-            `;
-          });
-          
-          cartItems.innerHTML = cartHTML;
-          totalAmount.textContent = formatCurrency(total);
-        }
-      }
-      
-      // Định dạng tiền tệ
-      function formatCurrency(amount) {
-        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount).replace('₫', '') + '₫';
-      }
-      
-      // Cập nhật số lượng sản phẩm
-      window.updateQuantity = function(index, change) {
-        const newQuantity = cart[index].quantity + change;
-        
-        if (newQuantity < 1) {
-          removeItem(index);
-          return;
-        }
-        
-        if (newQuantity > cart[index].stock) {
-          alert('Số lượng sản phẩm không đủ!');
-          return;
-        }
-        
-        cart[index].quantity = newQuantity;
-        updateCart();
-      };
-      
-      // Xóa sản phẩm khỏi giỏ hàng
-      window.removeItem = function(index) {
-        cart.splice(index, 1);
-        updateCart();
-      };
-      
-      // Lọc sản phẩm
-      function filterProducts() {
-        const searchText = searchInput.value.toLowerCase();
-        const categoryFilter = filterCategory.value;
-        const brandFilter = filterBrand.value;
-        
-        const productCards = document.querySelectorAll('.product-card');
-        
-        productCards.forEach(card => {
-          const productName = card.dataset.name.toLowerCase();
-          const productCategory = card.dataset.category;
-          const productBrand = card.dataset.brand;
-          
-          const matchesSearch = productName.includes(searchText);
-          const matchesCategory = categoryFilter === '' || productCategory === categoryFilter;
-          const matchesBrand = brandFilter === '' || productBrand === brandFilter;
-          
-          if (matchesSearch && matchesCategory && matchesBrand) {
-            card.style.display = 'block';
-          } else {
-            card.style.display = 'none';
-          }
-        });
-      }
-      
-      // Thiết lập các sự kiện lọc
-      searchInput.addEventListener('input', filterProducts);
-      filterCategory.addEventListener('change', filterProducts);
-      filterBrand.addEventListener('change', filterProducts);
-    });
-  </script>
+  <script src="banhang.js"></script>
 </body>
+
 </html>

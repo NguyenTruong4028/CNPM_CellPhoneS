@@ -130,15 +130,15 @@ $default_date = date('Y-m-d');
 
     <aside class="sidebar">
         <div class="sidebar-menu">
-            <a href="../CellPhoneS.php" class="menu-item active">
+            <a href="index.php" class="menu-item active">
                 <i>📱</i>
                 <span>Quản lý sản phẩm</span>
             </a>
-            <a href="../BanHang/banhang.php" class="menu-item">
+            <a href="#" class="menu-item">
                 <i>🛒</i>
                 <span>Bán hàng</span>
             </a>
-            <a href="../ThongKe/thongke.php" class="menu-item">
+            <a href="#" class="menu-item">
                 <i>📊</i>
                 <span>Thống kê</span>
             </a>
