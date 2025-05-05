@@ -124,7 +124,6 @@ $result = $conn->query($sql);
   }
   </style>
 </head>
-
 <body>
   <header>
     <div class="container">

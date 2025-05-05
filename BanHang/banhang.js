@@ -1,167 +1,322 @@
-document.addEventListener("DOMContentLoaded", function () {
-  const productGrid = document.getElementById("productGrid");
-  const cartItems = document.getElementById("cartItems");
-  const totalAmount = document.getElementById("totalAmount");
-  const checkoutBtn = document.getElementById("checkoutBtn");
-  const searchInput = document.getElementById("searchProduct");
-  const filterCategory = document.getElementById("filterCategory");
-  const filterBrand = document.getElementById("filterBrand");
-
-  let cart = [];
-
-  // Toggle mobile menu
-  document
-    .querySelector(".mobile-menu-toggle")
-    .addEventListener("click", function () {
-      document.querySelector(".sidebar").classList.toggle("active");
-    });
-
-  // Thêm sản phẩm vào giỏ hàng
-  productGrid.addEventListener("click", function (e) {
-    const productCard = e.target.closest(".product-card");
-    if (!productCard) return;
-
-    const productId = productCard.dataset.id;
-    const productName = productCard.dataset.name;
-    const productPrice = parseFloat(productCard.dataset.price);
-    const productStock = parseInt(productCard.dataset.stock);
-    const productImage = productCard.dataset.image;
-
-    // Kiểm tra xem sản phẩm đã có trong giỏ hàng chưa
-    const existingItemIndex = cart.findIndex((item) => item.id === productId);
-
-    if (existingItemIndex !== -1) {
-      // Nếu đã có, tăng số lượng nếu còn hàng
-      if (cart[existingItemIndex].quantity < productStock) {
-        cart[existingItemIndex].quantity++;
-      } else {
-        alert("Số lượng sản phẩm đã đạt tối đa!");
-        return;
-      }
-    } else {
-      // Nếu chưa có, thêm vào giỏ hàng
-      cart.push({
-        id: productId,
-        name: productName,
-        price: productPrice,
-        stock: productStock,
-        image: productImage,
-        quantity: 1,
-      });
+// Updated showInvoice function for banhang.js
+function showInvoice(invoice) {
+  try {
+    let itemsHTML = '';
+    if (!invoice.items || !Array.isArray(invoice.items)) {
+      throw new Error('Danh sách sản phẩm không hợp lệ');
     }
 
-    updateCart();
-  });
+    // Add invoice items with improved formatting
+    invoice.items.forEach((item, index) => {
+      itemsHTML += `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${item.name || 'Không xác định'}</td>
+          <td class="text-center">${item.quantity || 0}</td>
+          <td class="text-right">${formatCurrency(item.price || 0)}</td>
+          <td class="text-right">${formatCurrency((item.price || 0) * (item.quantity || 0))}</td>
+        </tr>
+      `;
+    });
 
-  // Cập nhật hiển thị giỏ hàng
-  function updateCart() {
-    if (cart.length === 0) {
-      cartItems.innerHTML =
-        '<div class="cart-empty">Chưa có sản phẩm nào trong giỏ hàng</div>';
-      checkoutBtn.disabled = true;
-    } else {
-      checkoutBtn.disabled = false;
+    // Format current date and time
+    const now = new Date();
+    const formattedDateTime = now.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
-      let cartHTML = "";
-      let total = 0;
-
-      cart.forEach((item, index) => {
-        const itemTotal = item.price * item.quantity;
-        total += itemTotal;
-
-        cartHTML += `
-          <div class="cart-item">
-            <img src="../Them+TraCuu/${item.image}" alt="${
-          item.name
-        }" class="cart-item-image">
-            <div class="cart-item-details">
-              <div class="cart-item-name">${item.name}</div>
-              <div class="cart-item-price">${formatCurrency(item.price)}</div>
-            </div>
-            <div class="cart-item-actions">
-              <div class="quantity-control">
-                <button type="button" class="quantity-btn" onclick="updateQuantity(${index}, -1)">-</button>
-                <input type="text" class="quantity-input" value="${
-                  item.quantity
-                }" readOnly>
-                <input type="hidden" name="products[]" value="${item.id}">
-                <input type="hidden" name="quantities[]" value="${
-                  item.quantity
-                }">
-                <button type="button" class="quantity-btn" onclick="updateQuantity(${index}, 1)">+</button>
-              </div>
-              <button type="button" class="remove-btn" onclick="removeItem(${index})">×</button>
-            </div>
+    // Generate invoice content with more details
+    invoiceContent.innerHTML = `
+      <div class="invoice-header">
+        <div class="company-info">
+          <img src="../Them+TraCuu/imgs/LogoCPS.jpg" alt="CellphoneS Logo" class="invoice-logo">
+          <h1>CellphoneS</h1>
+        </div>
+        <h2>HÓA ĐƠN BÁN HÀNG</h2>
+        <div class="invoice-details">
+          <table class="invoice-info-table">
+            <tr>
+              <td><strong>Mã hóa đơn:</strong></td>
+              <td>${invoice.id || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td><strong>Ngày lập:</strong></td>
+              <td>${invoice.date || formattedDateTime}</td>
+            </tr>
+            <tr>
+              <td><strong>Khách hàng:</strong></td>
+              <td>${invoice.customer || 'Khách lẻ'}</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <table class="invoice-table">
+        <thead>
+          <tr>
+            <th style="width: 5%">STT</th>
+            <th style="width: 45%">Tên sản phẩm</th>
+            <th style="width: 10%" class="text-center">Số lượng</th>
+            <th style="width: 20%" class="text-right">Đơn giá</th>
+            <th style="width: 20%" class="text-right">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHTML}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="text-right"><strong>Tổng tiền:</strong></td>
+            <td class="text-right total-amount">${formatCurrency(invoice.total || 0)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="invoice-footer">
+        <div class="signature-section">
+          <div class="signature-box">
+            <p>Người bán hàng</p>
+            <div class="signature-line"></div>
           </div>
-        `;
-      });
+          <div class="signature-box">
+            <p>Khách hàng</p>
+            <div class="signature-line"></div>
+          </div>
+        </div>
+        <div class="thank-you-message">
+          <p>Cảm ơn quý khách đã mua hàng tại CellphoneS!</p>
+          <p>Hotline: 1800 2097 | Website: cellphones.com.vn</p>
+        </div>
+      </div>
+    `;
 
-      cartItems.innerHTML = cartHTML;
-      totalAmount.textContent = formatCurrency(total);
+    // Display the invoice modal
+    if (invoiceModal) {
+      invoiceModal.style.display = 'block';
+      console.log('Invoice modal displayed');
+    } else {
+      console.error('Không tìm thấy invoiceModal');
     }
+  } catch (error) {
+    console.error('Error in showInvoice:', error);
+    alert('Lỗi khi hiển thị hóa đơn: ' + error.message);
   }
+}
 
-  // Định dạng tiền tệ
-  function formatCurrency(amount) {
-    return (
-      new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" })
-        .format(amount)
-        .replace("₫", "") + "₫"
-    );
+// Enhanced print function
+function printInvoice() {
+  const printContent = invoiceContent.innerHTML;
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>In hóa đơn - CellphoneS</title>
+        <meta charset="UTF-8">
+        <style>
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+          body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 210mm;
+            margin: 0 auto;
+            line-height: 1.5;
+            color: #333;
+          }
+          .company-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+          }
+          .invoice-logo {
+            max-height: 60px;
+            margin-right: 15px;
+          }
+          .company-info h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #d70018;
+          }
+          .invoice-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+          }
+          .invoice-header h2 {
+            margin: 10px 0;
+            font-size: 22px;
+            text-transform: uppercase;
+            color: #333;
+          }
+          .invoice-info-table {
+            width: 100%;
+            margin-bottom: 15px;
+          }
+          .invoice-info-table td {
+            padding: 5px;
+            vertical-align: top;
+          }
+          .invoice-info-table td:first-child {
+            width: 150px;
+          }
+          .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .invoice-table th, .invoice-table td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: left;
+            font-size: 14px;
+          }
+          .invoice-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+          }
+          .text-right {
+            text-align: right;
+          }
+          .text-center {
+            text-align: center;
+          }
+          .total-amount {
+            font-weight: bold;
+            font-size: 16px;
+          }
+          .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            margin-bottom: 30px;
+          }
+          .signature-box {
+            width: 45%;
+            text-align: center;
+          }
+          .signature-line {
+            margin-top: 50px;
+            border-top: 1px solid #333;
+            width: 80%;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          .thank-you-message {
+            text-align: center;
+            margin-top: 30px;
+            font-style: italic;
+          }
+          .thank-you-message p {
+            margin: 5px 0;
+          }
+          tfoot {
+            font-weight: bold;
+          }
+          @media print {
+            .no-print {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${printContent}
+        <div class="no-print">
+          <button onclick="window.print();" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 20px auto; display: block;">
+            In hóa đơn
+          </button>
+        </div>
+        <script>
+          window.onload = function() {
+            // Auto print after small delay to ensure everything is loaded
+            setTimeout(() => {
+              window.print();
+              // Don't auto close window so user can see if there were any issues
+            }, 500);
+          }
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  console.log('Print window opened with enhanced styling');
+}
+
+// Update the event listener for printing
+document.addEventListener("DOMContentLoaded", function() {
+  const printInvoiceBtn = document.getElementById("printInvoice");
+  
+  if (printInvoiceBtn) {
+    printInvoiceBtn.removeEventListener("click", window.printInvoice); // Remove any existing handlers
+    printInvoiceBtn.addEventListener("click", printInvoice);
+  } else {
+    console.error('Print button not found');
   }
-
-  // Cập nhật số lượng sản phẩm
-  window.updateQuantity = function (index, change) {
-    const newQuantity = cart[index].quantity + change;
-
-    if (newQuantity < 1) {
-      removeItem(index);
-      return;
-    }
-
-    if (newQuantity > cart[index].stock) {
-      alert("Số lượng sản phẩm không đủ!");
-      return;
-    }
-
-    cart[index].quantity = newQuantity;
-    updateCart();
-  };
-
-  // Xóa sản phẩm khỏi giỏ hàng
-  window.removeItem = function (index) {
-    cart.splice(index, 1);
-    updateCart();
-  };
-
-  // Lọc sản phẩm
-  function filterProducts() {
-    const searchText = searchInput.value.toLowerCase();
-    const categoryFilter = filterCategory.value;
-    const brandFilter = filterBrand.value;
-
-    const productCards = document.querySelectorAll(".product-card");
-
-    productCards.forEach((card) => {
-      const productName = card.dataset.name.toLowerCase();
-      const productCategory = card.dataset.category;
-      const productBrand = card.dataset.brand;
-
-      const matchesSearch = productName.includes(searchText);
-      const matchesCategory =
-        categoryFilter === "" || productCategory === categoryFilter;
-      const matchesBrand = brandFilter === "" || productBrand === brandFilter;
-
-      if (matchesSearch && matchesCategory && matchesBrand) {
-        card.style.display = "block";
-      } else {
-        card.style.display = "none";
-      }
-    });
-  }
-
-  // Thiết lập các sự kiện lọc
-  searchInput.addEventListener("input", filterProducts);
-  filterCategory.addEventListener("change", filterProducts);
-  filterBrand.addEventListener("change", filterProducts);
 });
+
+// Add a function to convert invoice data to CSV for export
+function exportInvoiceToCSV(invoice) {
+  try {
+    // Create CSV header
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Mã hóa đơn,Ngày lập,Khách hàng,Tổng tiền\n";
+    csvContent += `${invoice.id},${invoice.date},${invoice.customer},${invoice.total}\n\n`;
+    
+    // Add item details
+    csvContent += "STT,Tên Sản Phẩm,Số Lượng,Đơn Giá,Thành Tiền\n";
+    
+    invoice.items.forEach((item, index) => {
+      const rowData = [
+        index + 1,
+        item.name || 'Không xác định',
+        item.quantity || 0,
+        item.price || 0,
+        (item.price || 0) * (item.quantity || 0)
+      ];
+      csvContent += rowData.join(',') + '\n';
+    });
+    
+    // Create download link
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `hoadon_${invoice.id}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link); // Required for Firefox
+    link.click();
+    document.body.removeChild(link);
+    
+  } catch (error) {
+    console.error('Error exporting invoice to CSV:', error);
+    alert('Lỗi khi xuất hóa đơn sang CSV: ' + error.message);
+  }
+}
+
+// Add a function to save invoice data to local storage for backup
+function saveInvoiceToLocalStorage(invoice) {
+  try {
+    const savedInvoices = JSON.parse(localStorage.getItem('recentInvoices') || '[]');
+    // Add current invoice to the beginning
+    savedInvoices.unshift({
+      id: invoice.id,
+      date: invoice.date,
+      customer: invoice.customer,
+      total: invoice.total,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Keep only the last 20 invoices
+    if (savedInvoices.length > 20) {
+      savedInvoices.length = 20;
+    }
+    
+    localStorage.setItem('recentInvoices', JSON.stringify(savedInvoices));
+    console.log('Invoice saved to local storage');
+  } catch (error) {
+    console.error('Error saving invoice to local storage:', error);
+  }
+}
